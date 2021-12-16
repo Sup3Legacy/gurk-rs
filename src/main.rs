@@ -249,6 +249,10 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     // Toggle help panel
                     app.toggle_help();
                 }
+                KeyCode::F(2u8) => {
+                    // Toggle settings panel
+                    app.toggle_settings();
+                }
                 KeyCode::Char('c') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     break;
                 }

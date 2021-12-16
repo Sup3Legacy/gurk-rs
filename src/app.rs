@@ -44,10 +44,17 @@ pub struct App {
     pub should_quit: bool,
     url_regex: LazyRegex,
     attachment_regex: LazyRegex,
-    display_help: bool,
+    active_panel: Panel,
     pub is_searching: bool,
     pub channel_text_width: usize,
     receipt_handler: ReceiptHandler,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Panel {
+    Messages,
+    Help,
+    Settings,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -115,7 +122,7 @@ pub struct ReceiptEvent {
     uuid: Uuid,
     /// Timestamp of the messages
     timestamp: u64,
-    /// Type : Delivered, Read
+    /// Type : Received, Read
     receipt_type: Receipt,
 }
 
@@ -145,7 +152,7 @@ impl ReceiptQueues {
 
     pub fn add_received(&mut self, timestamp: u64) {
         if !self.received_msg.insert(timestamp) {
-            log::error!("Somehow got duplicate Delivered receipt @ {}", timestamp);
+            log::error!("Somehow got duplicate Received receipt @ {}", timestamp);
         }
     }
 
@@ -160,7 +167,7 @@ impl ReceiptQueues {
 
     pub fn add(&mut self, timestamp: u64, receipt: Receipt) {
         match receipt {
-            Receipt::Delivered => self.add_received(timestamp),
+            Receipt::Received => self.add_received(timestamp),
             Receipt::Read => self.add_read(timestamp),
             _ => {}
         }
@@ -169,7 +176,7 @@ impl ReceiptQueues {
     pub fn get_data(&mut self) -> Option<(Vec<u64>, Receipt)> {
         if !self.received_msg.is_empty() {
             let timestamps = self.received_msg.drain().collect::<Vec<u64>>();
-            return Some((timestamps, Receipt::Delivered));
+            return Some((timestamps, Receipt::Received));
         }
         if !self.read_msg.is_empty() {
             let timestamps = self.read_msg.drain().collect::<Vec<u64>>();
@@ -312,6 +319,16 @@ pub struct AppData {
     pub input: BoxData,
     #[serde(skip)]
     pub search_box: BoxData,
+    #[serde(default)]
+    pub settings: Settings,
+}
+
+#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Settings {
+    send_receipts: bool,
+    show_typing: bool,
+    // Not used for now, as we don't send typing messages
+    send_typing: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -504,7 +521,7 @@ impl TypingAction {
 pub enum Receipt {
     Nothing, // Do not do anything to these receipts in order to avoid spamming receipt messages when an old database is loaded
     Sent,
-    Delivered,
+    Received,
     Read,
 }
 
@@ -519,7 +536,7 @@ impl Receipt {
         match self {
             Self::Nothing => "",
             Self::Sent => "(x)",
-            Self::Delivered => "(xx)",
+            Self::Received => "(xx)",
             Self::Read => "(xxx)",
         }
     }
@@ -530,7 +547,7 @@ impl Receipt {
 
     pub fn from_i32(i: i32) -> Self {
         match i {
-            0 => Self::Delivered,
+            0 => Self::Received,
             1 => Self::Read,
             _ => Self::Nothing,
         }
@@ -614,7 +631,7 @@ impl App {
             should_quit: false,
             url_regex: LazyRegex::new(URL_REGEX),
             attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
-            display_help: false,
+            active_panel: Panel::Messages,
             is_searching: false,
             channel_text_width: 0,
             receipt_handler: ReceiptHandler::new(),
@@ -972,7 +989,7 @@ impl App {
                 self.notify(&from, &text);
 
                 // Send "Read" receipt
-                self.add_receipt_event(ReceiptEvent::new(uuid, timestamp, Receipt::Delivered));
+                self.add_receipt_event(ReceiptEvent::new(uuid, timestamp, Receipt::Received));
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let message = Message {
@@ -1566,15 +1583,25 @@ impl App {
     }
 
     pub fn toggle_help(&mut self) {
-        self.display_help = !self.display_help;
+        self.active_panel = match self.active_panel {
+            Panel::Messages | Panel::Settings => Panel::Help,
+            Panel::Help => Panel::Messages,
+        };
+    }
+
+    pub fn toggle_settings(&mut self) {
+        self.active_panel = match self.active_panel {
+            Panel::Messages | Panel::Help => Panel::Settings,
+            Panel::Settings => Panel::Messages,
+        };
     }
 
     pub fn toggle_search(&mut self) {
         self.is_searching = !self.is_searching;
     }
 
-    pub fn is_help(&self) -> bool {
-        self.display_help
+    pub fn get_active_panel(&self) -> Panel {
+        self.active_panel
     }
 }
 

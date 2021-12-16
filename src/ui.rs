@@ -1,4 +1,4 @@
-use crate::app::ReceiptEvent;
+use crate::app::{Panel, ReceiptEvent};
 use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::util;
 use crate::{app, App};
@@ -62,32 +62,49 @@ pub fn coords_within_channels_view<B: Backend>(
 }
 
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
-    if app.is_help() {
-        // Display shortcut panel
-        let chunks = Layout::default()
-            .constraints([
-                Constraint::Percentage(15),
-                Constraint::Percentage(70),
-                Constraint::Percentage(15),
-            ])
-            .direction(Direction::Horizontal)
-            .split(f.size());
-        draw_help(f, app, chunks[1]);
-        return;
-    }
-    let chunks = Layout::default()
-        .constraints(
-            [
-                Constraint::Ratio(1, CHANNEL_VIEW_RATIO),
-                Constraint::Ratio(3, CHANNEL_VIEW_RATIO),
-            ]
-            .as_ref(),
-        )
-        .direction(Direction::Horizontal)
-        .split(f.size());
+    match app.get_active_panel() {
+        Panel::Messages => {
+            let chunks = Layout::default()
+                .constraints(
+                    [
+                        Constraint::Ratio(1, CHANNEL_VIEW_RATIO),
+                        Constraint::Ratio(3, CHANNEL_VIEW_RATIO),
+                    ]
+                    .as_ref(),
+                )
+                .direction(Direction::Horizontal)
+                .split(f.size());
 
-    draw_channels_column(f, app, chunks[0]);
-    draw_chat(f, app, chunks[1]);
+            draw_channels_column(f, app, chunks[0]);
+            draw_chat(f, app, chunks[1]);
+        }
+        Panel::Help => {
+            // Display shortcut panel
+            let chunks = Layout::default()
+                .constraints([
+                    Constraint::Percentage(15),
+                    Constraint::Percentage(70),
+                    Constraint::Percentage(15),
+                ])
+                .direction(Direction::Horizontal)
+                .split(f.size());
+            draw_help(f, app, chunks[1]);
+            return;
+        }
+        Panel::Settings => {
+            // Display settings panel
+            let chunks = Layout::default()
+                .constraints([
+                    Constraint::Percentage(15),
+                    Constraint::Percentage(70),
+                    Constraint::Percentage(15),
+                ])
+                .direction(Direction::Horizontal)
+                .split(f.size());
+            draw_settings(f, app, chunks[1]);
+            return;
+        }
+    }
 }
 
 fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
@@ -291,7 +308,7 @@ fn prepare_receipts(app: &mut App, height: usize) {
         .skip(offset)
         .for_each(|msg| match msg.receipt {
             Receipt::Read | Receipt::Nothing | Receipt::Sent => (),
-            Receipt::Delivered => {
+            Receipt::Received => {
                 if msg.from_id != user_id {
                     to_send.push((msg.from_id, msg.arrived_at));
                     msg.receipt = Receipt::Read
@@ -636,6 +653,35 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let shorts_widget =
         List::new(shorts).block(Block::default().borders(Borders::ALL).title("Help"));
+    f.render_stateful_widget(shorts_widget, area, &mut app.data.channels.state);
+}
+
+fn draw_settings<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+    let max_event_width = SHORTCUTS
+        .iter()
+        .map(
+            |ShortCut {
+                 event: ev,
+                 description: _,
+             }| { (**ev).width() },
+        )
+        .max()
+        .unwrap_or(0);
+
+    let width = area.width.saturating_sub(2) as usize;
+    let delimiter = Span::from(": ");
+    const DELIMITER_WIDTH: usize = 2;
+    let prefix_width = max_event_width + DELIMITER_WIDTH + 1; // +1 because we add 1 extra " " between the event and the delimiter
+    let prefix = " ".repeat(prefix_width);
+
+    let wrap_opts = textwrap::Options::new(width)
+        .initial_indent(&prefix)
+        .subsequent_indent(&prefix);
+
+    let shorts: Vec<ListItem> = Vec::new();
+
+    let shorts_widget =
+        List::new(shorts).block(Block::default().borders(Borders::ALL).title("Settings :>"));
     f.render_stateful_widget(shorts_widget, area, &mut app.data.channels.state);
 }
 

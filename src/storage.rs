@@ -252,6 +252,7 @@ mod tests {
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
             }]),
+            settings: Default::default(),
         };
 
         let file = NamedTempFile::new()?;
