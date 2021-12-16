@@ -115,7 +115,7 @@ pub struct ReceiptEvent {
     uuid: Uuid,
     /// Timestamp of the messages
     timestamp: u64,
-    /// Type : Received, Delivered
+    /// Type : Delivered, Read
     receipt_type: Receipt,
 }
 
@@ -145,7 +145,7 @@ impl ReceiptQueues {
 
     pub fn add_received(&mut self, timestamp: u64) {
         if !self.received_msg.insert(timestamp) {
-            log::error!("Somehow got duplicate Received receipt @ {}", timestamp);
+            log::error!("Somehow got duplicate Delivered receipt @ {}", timestamp);
         }
     }
 
@@ -154,14 +154,14 @@ impl ReceiptQueues {
         // in the case a message is immediatly received and read.
         self.received_msg.remove(&timestamp);
         if !self.read_msg.insert(timestamp) {
-            log::error!("Somehow got duplicate Delivered receipt @ {}", timestamp);
+            log::error!("Somehow got duplicate Read receipt @ {}", timestamp);
         }
     }
 
     pub fn add(&mut self, timestamp: u64, receipt: Receipt) {
         match receipt {
-            Receipt::Received => self.add_received(timestamp),
-            Receipt::Delivered => self.add_read(timestamp),
+            Receipt::Delivered => self.add_received(timestamp),
+            Receipt::Read => self.add_read(timestamp),
             _ => {}
         }
     }
@@ -169,11 +169,11 @@ impl ReceiptQueues {
     pub fn get_data(&mut self) -> Option<(Vec<u64>, Receipt)> {
         if !self.received_msg.is_empty() {
             let timestamps = self.received_msg.drain().collect::<Vec<u64>>();
-            return Some((timestamps, Receipt::Received));
+            return Some((timestamps, Receipt::Delivered));
         }
         if !self.read_msg.is_empty() {
             let timestamps = self.read_msg.drain().collect::<Vec<u64>>();
-            return Some((timestamps, Receipt::Delivered));
+            return Some((timestamps, Receipt::Read));
         }
         None
     }
@@ -504,8 +504,8 @@ impl TypingAction {
 pub enum Receipt {
     Nothing, // Do not do anything to these receipts in order to avoid spamming receipt messages when an old database is loaded
     Sent,
-    Received,
     Delivered,
+    Read,
 }
 
 impl Default for Receipt {
@@ -519,8 +519,8 @@ impl Receipt {
         match self {
             Self::Nothing => "",
             Self::Sent => "(x)",
-            Self::Received => "(xx)",
-            Self::Delivered => "(xxx)",
+            Self::Delivered => "(xx)",
+            Self::Read => "(xxx)",
         }
     }
 
@@ -530,15 +530,15 @@ impl Receipt {
 
     pub fn from_i32(i: i32) -> Self {
         match i {
-            0 => Self::Received,
-            1 => Self::Delivered,
+            0 => Self::Delivered,
+            1 => Self::Read,
             _ => Self::Nothing,
         }
     }
 
     pub fn to_i32(self) -> i32 {
         match self {
-            Self::Delivered => 1,
+            Self::Read => 1,
             _ => 0,
         }
     }
@@ -971,8 +971,8 @@ impl App {
 
                 self.notify(&from, &text);
 
-                // Send "Delivered" receipt
-                self.add_receipt_event(ReceiptEvent::new(uuid, timestamp, Receipt::Received));
+                // Send "Read" receipt
+                self.add_receipt_event(ReceiptEvent::new(uuid, timestamp, Receipt::Delivered));
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let message = Message {
