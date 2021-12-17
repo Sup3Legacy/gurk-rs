@@ -2,6 +2,7 @@
 
 mod app;
 mod config;
+mod settings;
 mod shortcuts;
 mod signal;
 mod storage;

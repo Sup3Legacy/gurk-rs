@@ -1,4 +1,5 @@
 use crate::app::{Panel, ReceiptEvent};
+use crate::settings::{SettingElement, SettingValue, SETTING_ELEMENTS};
 use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::util;
 use crate::{app, App};
@@ -89,7 +90,6 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
                 .direction(Direction::Horizontal)
                 .split(f.size());
             draw_help(f, app, chunks[1]);
-            return;
         }
         Panel::Settings => {
             // Display settings panel
@@ -102,7 +102,6 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
                 .direction(Direction::Horizontal)
                 .split(f.size());
             draw_settings(f, app, chunks[1]);
-            return;
         }
     }
 }
@@ -657,13 +656,12 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 }
 
 fn draw_settings<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
-    let max_event_width = SHORTCUTS
+    let max_event_width = SETTING_ELEMENTS
         .iter()
         .map(
-            |ShortCut {
-                 event: ev,
-                 description: _,
-             }| { (**ev).width() },
+            |SettingElement {
+                 setting_type: t, ..
+             }| { t.width() },
         )
         .max()
         .unwrap_or(0);
@@ -678,10 +676,53 @@ fn draw_settings<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .initial_indent(&prefix)
         .subsequent_indent(&prefix);
 
-    let shorts: Vec<ListItem> = Vec::new();
+    let settings: Vec<ListItem> = SETTING_ELEMENTS
+        .iter()
+        .map(
+            |SettingElement {
+                 description: desc,
+                 setting_type: st,
+                 read_value: rval,
+                 set_value: _sval,
+             }| {
+                let description = desc;
+
+                let wrapped = textwrap::wrap(description, &wrap_opts);
+
+                let mut res = Vec::new();
+
+                wrapped.into_iter().enumerate().for_each(|(i, line)| {
+                    let mut truc = Vec::new();
+                    if i == 0 {
+                        let value_span = Span::from(textwrap::indent(
+                            &" ".repeat(
+                                max_event_width.checked_sub(st.width()).unwrap_or_default() + 1,
+                            ),
+                            match rval(&app.data.settings) {
+                                SettingValue::Bool(true) => "ON",
+                                _ => "XX",
+                            },
+                        ));
+                        truc.push(value_span);
+                        truc.push(delimiter.clone());
+                        truc.push(Span::from(line.strip_prefix(&prefix).unwrap().to_string()));
+                    } else {
+                        truc.push(Span::from(line.to_string()))
+                    };
+
+                    let spans = Spans::from(truc);
+                    res.push(spans);
+                });
+
+                //let spans = Spans::from(res);
+
+                ListItem::new(Text::from(res))
+            },
+        )
+        .collect();
 
     let shorts_widget =
-        List::new(shorts).block(Block::default().borders(Borders::ALL).title("Settings :>"));
+        List::new(settings).block(Block::default().borders(Borders::ALL).title("Settings :>"));
     f.render_stateful_widget(shorts_widget, area, &mut app.data.channels.state);
 }
 

@@ -5,7 +5,7 @@ pub struct ShortCut {
     pub description: &'static str,
 }
 
-pub static SHORTCUTS: &[ShortCut] = &[
+pub const SHORTCUTS: &[ShortCut] = &[
     ShortCut {
         event: "F1",
         description: "Toggle help panel.",

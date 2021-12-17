@@ -325,10 +325,10 @@ pub struct AppData {
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
-    send_receipts: bool,
-    show_typing: bool,
+    pub send_receipts: bool,
+    pub show_typing: bool,
     // Not used for now, as we don't send typing messages
-    send_typing: bool,
+    pub send_typing: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
