@@ -1328,7 +1328,7 @@ impl App {
             if is_stale {
                 let ResolvedGroup {
                     name,
-                    mut group_data,
+                    group_data,
                     profile_keys,
                 } = self.signal_manager.resolve_group(master_key).await?;
 
@@ -1341,7 +1341,7 @@ impl App {
                 )
                 .await;
 
-                let timer = group_data.expire_timer.take();
+                let timer = group_data.expire_timer;
 
                 match timer {
                     None => {
@@ -1355,6 +1355,7 @@ impl App {
                 let channel = &mut self.data.channels.items[channel_idx];
                 channel.name = name;
                 channel.group_data = Some(group_data);
+                channel.expire_timer = timer;
             }
             Ok(channel_idx)
         } else {

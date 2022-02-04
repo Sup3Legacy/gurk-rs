@@ -278,10 +278,9 @@ impl SignalManager for PresageManager {
             master_key_bytes,
             members,
             revision: decrypted_group.revision,
-            expire_timer: match decrypted_group.disappearing_messages_timer {
-                None => None,
-                Some(timer) => Some(timer.duration),
-            },
+            expire_timer: decrypted_group
+                .disappearing_messages_timer
+                .map(|t| t.duration),
         };
 
         Ok(ResolvedGroup {

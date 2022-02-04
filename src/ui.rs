@@ -205,6 +205,19 @@ fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize)
     (res, cursor, line + 1)
 }
 
+fn message_expiration(timer: Option<u32>) -> String {
+    match timer {
+        None => String::new(),
+        Some(duration) => match duration {
+            0..=59 => format!(" {} second(s)", duration),
+            60..=3599 => format!(" {} minute(s)", duration / 60),
+            3600..=86399 => format!(" {} hour(s)", duration / 3600),
+            86400..=604799 => format!(" {} day(s)", duration / 86400),
+            604800.. => format!(" {} week(s)", duration / 604800),
+        },
+    }
+}
+
 fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
     let (wrapped_input, cursor, num_input_lines) = wrap(
@@ -381,7 +394,11 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
     }
 
-    let title = format!("Messages {}", writing_people);
+    let title = format!(
+        "Messages {}{}",
+        writing_people,
+        message_expiration(channel.expire_timer)
+    );
 
     let list = List::new(items)
         .block(Block::default().title(title).borders(Borders::ALL))
