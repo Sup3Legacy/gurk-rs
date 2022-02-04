@@ -266,6 +266,9 @@ pub struct AppData {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExpireTimer {}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "JsonChannel")]
 pub struct Channel {
     pub id: ChannelId,
@@ -275,6 +278,7 @@ pub struct Channel {
     pub messages: StatefulList<Message>,
     pub unread_messages: usize,
     pub typing: TypingSet,
+    pub expire_timer: Option<u32>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -296,6 +300,7 @@ pub struct JsonChannel {
     pub messages: StatefulList<Message>,
     #[serde(default)]
     pub unread_messages: usize,
+    pub expire_timer: Option<u32>,
 }
 
 impl TryFrom<JsonChannel> for Channel {
@@ -315,6 +320,7 @@ impl TryFrom<JsonChannel> for Channel {
                     TypingSet::SingleTyping(false)
                 }
             },
+            expire_timer: channel.expire_timer,
         };
 
         // 1. The master key in ChannelId::Group was replaced by group identifier,
@@ -336,6 +342,7 @@ pub struct GroupData {
     pub master_key_bytes: GroupMasterKeyBytes,
     pub members: Vec<Uuid>,
     pub revision: u32,
+    pub expire_timer: Option<u32>,
 }
 
 impl Channel {
@@ -508,6 +515,8 @@ pub struct Message {
     pub reactions: Vec<(Uuid, String)>,
     #[serde(default)]
     pub receipt: Receipt,
+    //#[serde(default)]
+    //pub expire_timer: Option<u32>,
 }
 
 impl Message {
@@ -846,11 +855,17 @@ impl App {
                                     attachments: attachment_pointers,
                                     ..
                                 }),
+                            expiration_start_timestamp,
                             ..
                         }),
                     ..
                 }),
             ) if sender_uuid == user_id => {
+                log::info!(
+                    "Got expiration_start_timestamp {:?}, sent on {:?}",
+                    expiration_start_timestamp,
+                    timestamp
+                );
                 let channel_idx = if let Some(GroupContextV2 {
                     master_key: Some(master_key),
                     revision: Some(revision),
@@ -1313,7 +1328,7 @@ impl App {
             if is_stale {
                 let ResolvedGroup {
                     name,
-                    group_data,
+                    mut group_data,
                     profile_keys,
                 } = self.signal_manager.resolve_group(master_key).await?;
 
@@ -1326,6 +1341,17 @@ impl App {
                 )
                 .await;
 
+                let timer = group_data.expire_timer.take();
+
+                match timer {
+                    None => {
+                        log::info!("No duration")
+                    }
+                    Some(duration) => {
+                        log::info!("New duration of {:?}", duration)
+                    }
+                }
+
                 let channel = &mut self.data.channels.items[channel_idx];
                 channel.name = name;
                 channel.group_data = Some(group_data);
@@ -1334,7 +1360,7 @@ impl App {
         } else {
             let ResolvedGroup {
                 name,
-                group_data,
+                mut group_data,
                 profile_keys,
             } = self.signal_manager.resolve_group(master_key).await?;
 
@@ -1346,6 +1372,16 @@ impl App {
                     .zip(profile_keys.into_iter()),
             )
             .await;
+            let timer = group_data.expire_timer.take();
+
+            match timer {
+                None => {
+                    log::debug!("No duration")
+                }
+                Some(duration) => {
+                    log::debug!("New duration of {:?}", duration)
+                }
+            }
 
             self.data.channels.items.push(Channel {
                 id,
@@ -1354,6 +1390,7 @@ impl App {
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
                 typing: TypingSet::GroupTyping(HashSet::new()),
+                expire_timer: timer,
             });
             Ok(self.data.channels.items.len() - 1)
         }
@@ -1421,6 +1458,7 @@ impl App {
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
+                expire_timer: None,
             });
             self.data.channels.items.len() - 1
         }
@@ -1449,6 +1487,7 @@ impl App {
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
+                expire_timer: None,
             });
             self.data.channels.items.len() - 1
         }
@@ -1629,6 +1668,7 @@ mod tests {
                 master_key_bytes: GroupMasterKeyBytes::default(),
                 members: vec![app.user_id],
                 revision: 1,
+                expire_timer: None,
             }),
             messages: StatefulList::with_items(vec![Message {
                 from_id: app.user_id,
@@ -1641,6 +1681,7 @@ mod tests {
             }]),
             unread_messages: 1,
             typing: TypingSet::GroupTyping(HashSet::new()),
+            expire_timer: None,
         });
         app.data.channels.state.select(Some(0));
 

@@ -234,6 +234,7 @@ mod tests {
                 messages: Default::default(),
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
+                expire_timer: None,
             }]),
         };
 
